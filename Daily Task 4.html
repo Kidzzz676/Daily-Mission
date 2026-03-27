@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>7 Day Tracker Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; margin: 5px; max-width: 480px; margin:auto; }
+    h2 { text-align: center; }
+
+    .activity {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+      font-size: 18px;
+    }
+
+    .activity label { margin-left: 10px; }
+
+    .activity button {
+      margin-left: auto;
+      background: red;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 5px 8px;
+    }
+
+    .progress-container {
+      margin: 8px 0;
+      height: 25px;
+      width: 100%;
+      background: #eee;
+      border-radius: 12px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 12px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+    }
+
+    button, input {
+      margin: 3px;
+      padding: 10px;
+      font-size: 16px;
+    }
+
+    #tabs { text-align: center; margin-bottom: 5px; }
+
+    .week-box {
+      border: 1px solid #ccc;
+      margin: 5px 0;
+      padding: 5px;
+      border-radius: 5px;
+      background: #f9f9f9;
+    }
+
+    #activities {
+      overflow-y: auto;
+      max-height: 50vh;
+    }
+
+    /* DARK MODE */
+    body.dark { background: #121212; color: white; }
+    body.dark .progress-container { background: #333; }
+    body.dark .week-box { background: #1e1e1e; }
+  </style>
+</head>
+<body>
+
+<h2>7 Day Tracker Pro</h2>
+
+<div style="text-align:center;">
+  <button id="darkModeBtn">🌙 Dark Mode</button>
+</div>
+
+<div id="tabs">
+  <button id="tabTracker">Tracker</button>
+  <button id="tabLog">Weekly Log</button>
+</div>
+
+<div id="trackerDiv">
+
+  <div style="text-align:center;">
+    <button id="prevDay">◀</button>
+    <span id="dayLabel">Day 1</span>
+    <button id="nextDay">▶</button>
+  </div>
+
+  <!-- TAMBAH AKTIVITAS -->
+  <div style="text-align:center;">
+    <input type="text" id="newActivity" placeholder="Tambah aktivitas">
+    <button id="addActivity">Tambah</button>
+  </div>
+
+  <div id="activities"></div>
+
+  <div class="progress-container">
+    <div id="progressBar" class="progress-bar">0%</div>
+  </div>
+
+  <p style="text-align:center;" id="targetText"></p>
+
+</div>
+
+<div id="weeklyLogContainer" style="display:none;"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  let activitiesList = JSON.parse(localStorage.getItem('activitiesList')) || [
+    "Solat Subuh","Solat Dzuhur","Solat Ashar","Solat Maghrib",
+    "Solat Isya","Olahraga 10 Menit","Membaca 10 menit","Belajar Inggris"
+  ];
+
+  const totalDays = 7;
+  let currentDay = 1;
+
+  let savedData = JSON.parse(localStorage.getItem('dailyTracker')) || {};
+  let weeklyLog = JSON.parse(localStorage.getItem('weeklyLog')) || [];
+
+  const activitiesDiv = document.getElementById('activities');
+  const progressBar = document.getElementById('progressBar');
+  const dayLabel = document.getElementById('dayLabel');
+  const targetText = document.getElementById('targetText');
+
+  function renderDay(day){
+    activitiesDiv.innerHTML = '';
+
+    // 📅 TANGGAL OTOMATIS
+    let today = new Date();
+    today.setDate(today.getDate() + (day - 1));
+    let dateString = today.toLocaleDateString();
+
+    dayLabel.textContent = `Day ${day} (${dateString})`;
+
+    activitiesList.forEach(act=>{
+      let div = document.createElement('div');
+      div.className='activity';
+
+      let checkbox = document.createElement('input');
+      checkbox.type='checkbox';
+      checkbox.checked = savedData[`${day}-${act}`]||false;
+
+      checkbox.addEventListener('change',()=>{
+        savedData[`${day}-${act}`]=checkbox.checked;
+        localStorage.setItem('dailyTracker',JSON.stringify(savedData));
+        updateProgress(day);
+      });
+
+      let label=document.createElement('label');
+      label.textContent=act;
+
+      // ❌ DELETE BUTTON
+      let deleteBtn = document.createElement('button');
+      deleteBtn.textContent = "❌";
+
+      deleteBtn.addEventListener('click',()=>{
+        if(confirm(`Hapus aktivitas "${act}"?`)){
+
+          activitiesList = activitiesList.filter(a => a !== act);
+          localStorage.setItem('activitiesList', JSON.stringify(activitiesList));
+
+          for(let d=1; d<=7; d++){
+            delete savedData[`${d}-${act}`];
+          }
+          localStorage.setItem('dailyTracker', JSON.stringify(savedData));
+
+          renderDay(currentDay);
+        }
+      });
+
+      div.appendChild(checkbox);
+      div.appendChild(label);
+      div.appendChild(deleteBtn);
+
+      activitiesDiv.appendChild(div);
+    });
+
+    updateProgress(day);
+  }
+
+  function updateProgress(day){
+    let done=0;
+
+    activitiesList.forEach(act=>{
+      if(savedData[`${day}-${act}`]) done++;
+    });
+
+    let percent=Math.round(done/activitiesList.length*100);
+
+    progressBar.style.width=percent+'%';
+    progressBar.textContent=percent+'%';
+
+    progressBar.style.background =
+      percent<50?'red':
+      percent<80?'orange':'green';
+
+    if(percent>=80){
+      targetText.textContent="🔥 Target tercapai!";
+    } else {
+      targetText.textContent="💪 Kejar minimal 80%!";
+    }
+  }
+
+  function saveAndResetWeek(){
+    let weekData={};
+
+    for(let d=1;d<=totalDays;d++){
+      weekData[`Day ${d}`]={};
+      activitiesList.forEach(act=>{
+        weekData[`Day ${d}`][act]=savedData[`${d}-${act}`]||false;
+      });
+    }
+
+    weeklyLog.push(weekData);
+    localStorage.setItem('weeklyLog',JSON.stringify(weeklyLog));
+
+    savedData={};
+    localStorage.setItem('dailyTracker',JSON.stringify(savedData));
+  }
+
+  function renderWeeklyLog(){
+    let container = document.getElementById('weeklyLogContainer');
+    container.innerHTML="";
+
+    if(weeklyLog.length===0){
+      container.innerHTML="<p style='text-align:center;'>Belum ada data</p>";
+      return;
+    }
+
+    let totalDone=0;
+    let totalAll=0;
+
+    weeklyLog.forEach((week,idx)=>{
+      let box=document.createElement('div');
+      box.className='week-box';
+
+      box.innerHTML=`<h4>Minggu ${idx+1}</h4>`;
+
+      for(let d=1;d<=totalDays;d++){
+        let row = `<strong>Day ${d}:</strong> `;
+        activitiesList.forEach(act=>{
+          let val = week[`Day ${d}`][act];
+          if(val) totalDone++;
+          totalAll++;
+          row += val ? "✅ " : "❌ ";
+        });
+        box.innerHTML+=row+"<br>";
+      }
+
+      container.appendChild(box);
+    });
+
+    let percent=Math.round(totalDone/totalAll*100);
+    container.innerHTML += `<p style="text-align:center;">Total Progress: ${percent}%</p>`;
+  }
+
+  // ➕ TAMBAH AKTIVITAS
+  document.getElementById('addActivity').addEventListener('click',()=>{
+    let newAct = document.getElementById('newActivity').value;
+
+    if(newAct){
+      activitiesList.push(newAct);
+      localStorage.setItem('activitiesList', JSON.stringify(activitiesList));
+      document.getElementById('newActivity').value="";
+      renderDay(currentDay);
+    }
+  });
+
+  // 🌙 DARK MODE
+  document.getElementById('darkModeBtn').addEventListener('click',()=>{
+    document.body.classList.toggle('dark');
+  });
+
+  document.getElementById('prevDay').addEventListener('click',()=>{
+    currentDay=(currentDay-2+totalDays)%totalDays+1;
+    renderDay(currentDay);
+  });
+
+  document.getElementById('nextDay').addEventListener('click',()=>{
+    if(currentDay===totalDays){
+      saveAndResetWeek();
+      currentDay=1;
+      alert("Minggu selesai!");
+    } else currentDay++;
+
+    renderDay(currentDay);
+  });
+
+  document.getElementById('tabTracker').addEventListener('click',()=>{
+    trackerDiv.style.display='block';
+    weeklyLogContainer.style.display='none';
+  });
+
+  document.getElementById('tabLog').addEventListener('click',()=>{
+    trackerDiv.style.display='none';
+    weeklyLogContainer.style.display='block';
+    renderWeeklyLog();
+  });
+
+  renderDay(currentDay);
+
+});
+</script>
+
+</body>
+</html>
