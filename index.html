@@ -63,7 +63,6 @@
       max-height: 50vh;
     }
 
-    /* DARK MODE */
     body.dark { background: #121212; color: white; }
     body.dark .progress-container { background: #333; }
     body.dark .week-box { background: #1e1e1e; }
@@ -86,11 +85,10 @@
 
   <div style="text-align:center;">
     <button id="prevDay">◀</button>
-    <span id="dayLabel">Day 1</span>
+    <span id="dayLabel"></span>
     <button id="nextDay">▶</button>
   </div>
 
-  <!-- TAMBAH AKTIVITAS -->
   <div style="text-align:center;">
     <input type="text" id="newActivity" placeholder="Tambah aktivitas">
     <button id="addActivity">Tambah</button>
@@ -112,30 +110,50 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   let activitiesList = JSON.parse(localStorage.getItem('activitiesList')) || [
-    "Solat Subuh","Solat Dzuhur","Solat Ashar","Solat Maghrib",
-    "Solat Isya","Olahraga 10 Menit","Membaca 10 menit","Belajar Inggris"
+    "Solat Subuh",
+    "Solat Dzuhur",
+    "Solat Ashar",
+    "Solat Maghrib",
+    "Solat Isya",
+
+    "Sikat Gigi Pagi",
+    "Sikat Gigi Malam",
+    "Minum Air Putih 2 Liter",
+    "Olahraga 10 Menit",
+
+    "Baca Buku 10 Menit",
+    "No PMO",
+
+    "Makan Pagi",
+    "Makan Siang",
+    "Makan Malam"
   ];
 
+  let currentDay = parseInt(localStorage.getItem('currentDay')) || 1;
   const totalDays = 7;
-  let currentDay = 1;
 
   let savedData = JSON.parse(localStorage.getItem('dailyTracker')) || {};
-  let weeklyLog = JSON.parse(localStorage.getItem('weeklyLog')) || [];
+
+  let weeklyLog;
+  try {
+    weeklyLog = JSON.parse(localStorage.getItem('weeklyLog')) || [];
+  } catch {
+    weeklyLog = [];
+  }
+
+  if(localStorage.getItem('darkMode') === 'true'){
+    document.body.classList.add('dark');
+  }
 
   const activitiesDiv = document.getElementById('activities');
   const progressBar = document.getElementById('progressBar');
   const dayLabel = document.getElementById('dayLabel');
   const targetText = document.getElementById('targetText');
+  const weeklyContainer = document.getElementById('weeklyLogContainer');
 
   function renderDay(day){
     activitiesDiv.innerHTML = '';
-
-    // 📅 TANGGAL OTOMATIS
-    let today = new Date();
-    today.setDate(today.getDate() + (day - 1));
-    let dateString = today.toLocaleDateString();
-
-    dayLabel.textContent = `Day ${day} (${dateString})`;
+    dayLabel.textContent = `Day ${day}`;
 
     activitiesList.forEach(act=>{
       let div = document.createElement('div');
@@ -143,40 +161,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let checkbox = document.createElement('input');
       checkbox.type='checkbox';
-      checkbox.checked = savedData[`${day}-${act}`]||false;
+      checkbox.checked = savedData[`${day}-${act}`] || false;
 
-      checkbox.addEventListener('change',()=>{
+      checkbox.onchange = ()=>{
         savedData[`${day}-${act}`]=checkbox.checked;
         localStorage.setItem('dailyTracker',JSON.stringify(savedData));
         updateProgress(day);
-      });
+      };
 
       let label=document.createElement('label');
       label.textContent=act;
 
-      // ❌ DELETE BUTTON
       let deleteBtn = document.createElement('button');
       deleteBtn.textContent = "❌";
 
-      deleteBtn.addEventListener('click',()=>{
-        if(confirm(`Hapus aktivitas "${act}"?`)){
-
-          activitiesList = activitiesList.filter(a => a !== act);
-          localStorage.setItem('activitiesList', JSON.stringify(activitiesList));
-
-          for(let d=1; d<=7; d++){
-            delete savedData[`${d}-${act}`];
-          }
-          localStorage.setItem('dailyTracker', JSON.stringify(savedData));
-
+      deleteBtn.onclick = ()=>{
+        if(confirm("Hapus aktivitas?")){
+          activitiesList = activitiesList.filter(a=>a!==act);
+          localStorage.setItem('activitiesList',JSON.stringify(activitiesList));
           renderDay(currentDay);
         }
-      });
+      };
 
       div.appendChild(checkbox);
       div.appendChild(label);
       div.appendChild(deleteBtn);
-
       activitiesDiv.appendChild(div);
     });
 
@@ -184,8 +193,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateProgress(day){
-    let done=0;
+    if(activitiesList.length === 0){
+      progressBar.style.width='0%';
+      progressBar.textContent='0%';
+      return;
+    }
 
+    let done=0;
     activitiesList.forEach(act=>{
       if(savedData[`${day}-${act}`]) done++;
     });
@@ -194,22 +208,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     progressBar.style.width=percent+'%';
     progressBar.textContent=percent+'%';
-
     progressBar.style.background =
       percent<50?'red':
       percent<80?'orange':'green';
 
-    if(percent>=80){
-      targetText.textContent="🔥 Target tercapai!";
-    } else {
-      targetText.textContent="💪 Kejar minimal 80%!";
-    }
+    targetText.textContent =
+      percent>=80 ? "🔥 Target tercapai!" : "💪 Kejar minimal 80%!";
   }
 
   function saveAndResetWeek(){
     let weekData={};
 
-    for(let d=1;d<=totalDays;d++){
+    for(let d=1;d<=7;d++){
       weekData[`Day ${d}`]={};
       activitiesList.forEach(act=>{
         weekData[`Day ${d}`][act]=savedData[`${d}-${act}`]||false;
@@ -224,83 +234,114 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderWeeklyLog(){
-    let container = document.getElementById('weeklyLogContainer');
-    container.innerHTML="";
+    weeklyContainer.innerHTML = `
+      <div style="text-align:center;">
+        <button id="exportExcel">📥 Export Excel</button>
+        <button id="resetWeeklyLog">🗑 Reset Log</button>
+      </div>
+    `;
 
     if(weeklyLog.length===0){
-      container.innerHTML="<p style='text-align:center;'>Belum ada data</p>";
+      weeklyContainer.innerHTML += "<p style='text-align:center;'>Belum ada data</p>";
       return;
     }
-
-    let totalDone=0;
-    let totalAll=0;
 
     weeklyLog.forEach((week,idx)=>{
       let box=document.createElement('div');
       box.className='week-box';
-
       box.innerHTML=`<h4>Minggu ${idx+1}</h4>`;
 
-      for(let d=1;d<=totalDays;d++){
-        let row = `<strong>Day ${d}:</strong> `;
+      for(let d=1;d<=7;d++){
+        let row=`<strong>Day ${d}:</strong> `;
         activitiesList.forEach(act=>{
-          let val = week[`Day ${d}`][act];
-          if(val) totalDone++;
-          totalAll++;
+          let val = week[`Day ${d}`]?.[act] || false;
           row += val ? "✅ " : "❌ ";
         });
         box.innerHTML+=row+"<br>";
       }
 
-      container.appendChild(box);
+      weeklyContainer.appendChild(box);
     });
-
-    let percent=Math.round(totalDone/totalAll*100);
-    container.innerHTML += `<p style="text-align:center;">Total Progress: ${percent}%</p>`;
   }
 
-  // ➕ TAMBAH AKTIVITAS
-  document.getElementById('addActivity').addEventListener('click',()=>{
-    let newAct = document.getElementById('newActivity').value;
+  weeklyContainer.addEventListener('click', (e)=>{
 
-    if(newAct){
-      activitiesList.push(newAct);
-      localStorage.setItem('activitiesList', JSON.stringify(activitiesList));
+    if(e.target.id === 'resetWeeklyLog'){
+      if(confirm("Hapus semua log?")){
+        weeklyLog=[];
+        localStorage.removeItem('weeklyLog');
+        renderWeeklyLog();
+      }
+    }
+
+    if(e.target.id === 'exportExcel'){
+      if(weeklyLog.length===0){
+        alert("Tidak ada data!");
+        return;
+      }
+
+      let csv = "\uFEFFMinggu,Hari," + activitiesList.join(",") + "\n";
+
+      weeklyLog.forEach((week,i)=>{
+        for(let d=1;d<=7;d++){
+          let row=[`Minggu ${i+1}`,`Day ${d}`];
+          activitiesList.forEach(act=>{
+            row.push(week[`Day ${d}`]?.[act]?"1":"0");
+          });
+          csv+=row.join(",")+"\n";
+        }
+      });
+
+      let link=document.createElement("a");
+      link.href=encodeURI("data:text/csv;charset=utf-8,"+csv);
+      link.download="habit_tracker.csv";
+      link.click();
+    }
+
+  });
+
+  document.getElementById('addActivity').onclick=()=>{
+    let val=document.getElementById('newActivity').value;
+    if(val && !activitiesList.includes(val)){
+      activitiesList.push(val);
+      localStorage.setItem('activitiesList',JSON.stringify(activitiesList));
       document.getElementById('newActivity').value="";
       renderDay(currentDay);
     }
-  });
+  };
 
-  // 🌙 DARK MODE
-  document.getElementById('darkModeBtn').addEventListener('click',()=>{
+  document.getElementById('darkModeBtn').onclick=()=>{
     document.body.classList.toggle('dark');
-  });
+    localStorage.setItem('darkMode',document.body.classList.contains('dark'));
+  };
 
-  document.getElementById('prevDay').addEventListener('click',()=>{
-    currentDay=(currentDay-2+totalDays)%totalDays+1;
+  document.getElementById('prevDay').onclick=()=>{
+    currentDay=(currentDay-2+7)%7+1;
+    localStorage.setItem('currentDay',currentDay);
     renderDay(currentDay);
-  });
+  };
 
-  document.getElementById('nextDay').addEventListener('click',()=>{
-    if(currentDay===totalDays){
+  document.getElementById('nextDay').onclick=()=>{
+    if(currentDay===7){
       saveAndResetWeek();
       currentDay=1;
       alert("Minggu selesai!");
     } else currentDay++;
 
+    localStorage.setItem('currentDay',currentDay);
     renderDay(currentDay);
-  });
+  };
 
-  document.getElementById('tabTracker').addEventListener('click',()=>{
+  tabTracker.onclick=()=>{
     trackerDiv.style.display='block';
-    weeklyLogContainer.style.display='none';
-  });
+    weeklyContainer.style.display='none';
+  };
 
-  document.getElementById('tabLog').addEventListener('click',()=>{
+  tabLog.onclick=()=>{
     trackerDiv.style.display='none';
-    weeklyLogContainer.style.display='block';
+    weeklyContainer.style.display='block';
     renderWeeklyLog();
-  });
+  };
 
   renderDay(currentDay);
 
